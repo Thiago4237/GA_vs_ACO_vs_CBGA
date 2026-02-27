@@ -1,6 +1,7 @@
 """
-runner.py — Experimento de 30 seeds. Opción A (tiempo fijo).
+Runner.py — Experimento de 30 seeds. Opción A (tiempo fijo).
 Guarda resultados + historial de convergencia + GAP%.
+Implementación orientada a objetos (OOP).
 """
 
 import time
@@ -8,14 +9,13 @@ import argparse
 import os
 import csv
 import json
-from typing import List, Dict
+from typing import List, Dict, Tuple
 
 from utils    import read_tsp, make_dist_matrix, tour_length, tour_length_idx
-from GA_tsp   import genetic_tsp
-from ACO_tsp  import ant_colony_tsp
-from CBGA_tsp import cbga_tsp
+from GA_tsp   import GeneticAlgorithm
+from ACO_tsp  import AntColony
+from CBGA_tsp import ChuBeasleyGA
 
-# Óptimos conocidos — agregar los tuyos aquí
 OPTIMOS = {
     "berlin52.tsp": 7542,
     "eil51.tsp":    426,
@@ -24,47 +24,143 @@ OPTIMOS = {
 }
 
 
-def stats(values: List[float]) -> Dict:
+def _stats(values: List[float]) -> Dict:
     n    = len(values)
     mean = sum(values) / n
     std  = (sum((x - mean) ** 2 for x in values) / n) ** 0.5
     return {"best": min(values), "worst": max(values), "mean": mean, "std": std}
 
 
-def gap(length: float, optimo: float) -> float:
+def _gap(length: float, optimo: float) -> float:
     return (length - optimo) / optimo * 100
 
 
-def run_ga(cities, seed, args):
-    t0 = time.perf_counter()
-    tour, historial = genetic_tsp(
-        cities=cities, pop_size=args.pop, time_limit=args.time_limit,
-        pc=args.pc, pm=args.pm, elitism_k=args.elitism,
-        tournament_k=args.tournament, local_2opt=not args.no_2opt, seed=seed,
-    )
-    return tour_length(tour), time.perf_counter() - t0, historial
+class ExperimentRunner:
+    """
+    Ejecuta el experimento multi-seed y guarda resultados en CSV.
 
+    Parámetros
+    ----------
+    args    : namespace de argparse
+    cities  : lista de ciudades
+    dist    : matriz de distancias
+    nombre  : nombre del archivo de instancia
+    seeds   : lista de seeds a ejecutar
+    """
 
-def run_cbga(cities, seed, args):
-    t0 = time.perf_counter()
-    tour, historial = cbga_tsp(
-        cities=cities, pop_size=args.pop, time_limit=args.time_limit,
-        pc=args.pc, pm=args.pm, tournament_k=args.tournament,
-        min_diversity=args.diversity, attempts_per_gen=args.attempts,
-        local_2opt=not args.no_2opt, seed=seed,
-    )
-    return tour_length(tour), time.perf_counter() - t0, historial
+    def __init__(self, args, cities, dist, nombre: str, seeds: List[int]):
+        self.args    = args
+        self.cities  = cities
+        self.dist    = dist
+        self.nombre  = nombre
+        self.seeds   = seeds
+        self.optimo  = OPTIMOS.get(nombre)
 
+        self.registros:   List[Dict]         = []
+        self.resultados:  Dict               = {a: {"lengths": [], "times": []} for a in ["GA", "CBGA", "ACO"]}
 
-def run_aco(cities, dist, seed, args):
-    t0 = time.perf_counter()
-    trail, historial = ant_colony_tsp(
-        dist=dist, num_ants=args.ants, time_limit=args.time_limit,
-        alpha=args.alpha, beta=args.beta, rho=args.rho, Q=args.q,
-        tau0=args.tau0, elitist=not args.no_elitist,
-        local_2opt=not args.no_2opt, seed=seed,
-    )
-    return tour_length_idx(trail, dist), time.perf_counter() - t0, historial
+    # ── Ejecución por algoritmo ───────────────────────────────────────────
+
+    def _run_ga(self, seed: int) -> Tuple[float, float, list]:
+        algo = GeneticAlgorithm(
+            cities=self.cities, pop_size=self.args.pop, time_limit=self.args.time_limit,
+            pc=self.args.pc, pm=self.args.pm, elitism_k=self.args.elitism,
+            tournament_k=self.args.tournament, local_2opt=not self.args.no_2opt, seed=seed,
+        )
+        t0 = time.perf_counter()
+        tour, historial = algo.run()
+        return tour_length(tour), time.perf_counter() - t0, historial
+
+    def _run_cbga(self, seed: int) -> Tuple[float, float, list]:
+        algo = ChuBeasleyGA(
+            cities=self.cities, pop_size=self.args.pop, time_limit=self.args.time_limit,
+            pc=self.args.pc, pm=self.args.pm, tournament_k=self.args.tournament,
+            min_diversity=self.args.diversity, attempts_per_gen=self.args.attempts,
+            local_2opt=not self.args.no_2opt, seed=seed,
+        )
+        t0 = time.perf_counter()
+        tour, historial = algo.run()
+        return tour_length(tour), time.perf_counter() - t0, historial
+
+    def _run_aco(self, seed: int) -> Tuple[float, float, list]:
+        algo = AntColony(
+            dist=self.dist, num_ants=self.args.ants, time_limit=self.args.time_limit,
+            alpha=self.args.alpha, beta=self.args.beta, rho=self.args.rho, Q=self.args.q,
+            tau0=self.args.tau0, elitist=not self.args.no_elitist,
+            local_2opt=not self.args.no_2opt, seed=seed,
+        )
+        t0 = time.perf_counter()
+        trail, historial = algo.run()
+        return tour_length_idx(trail, self.dist), time.perf_counter() - t0, historial
+
+    # ── Registro de resultados ────────────────────────────────────────────
+
+    def _registrar(self, algo: str, length: float, t: float, hist: list) -> None:
+        self.resultados[algo]["lengths"].append(length)
+        self.resultados[algo]["times"].append(t)
+        self.registros.append({
+            "instancia": self.nombre,
+            "algoritmo": algo,
+            "seed":      self.seeds[len(self.resultados[algo]["lengths"]) - 1],
+            "longitud":  round(length, 2),
+            "tiempo_s":  round(t, 4),
+            "gap_pct":   round(_gap(length, self.optimo), 4) if self.optimo else "",
+            "historial": json.dumps(hist),
+        })
+
+    # ── Ejecución completa ────────────────────────────────────────────────
+
+    def run(self) -> None:
+        for i, seed in enumerate(self.seeds, 1):
+            print(f"  Seed {seed:3d} ({i:2d}/{len(self.seeds)})", end="  ")
+
+            len_ga,   t_ga,   hist_ga   = self._run_ga(seed)
+            len_cbga, t_cbga, hist_cbga = self._run_cbga(seed)
+            len_aco,  t_aco,  hist_aco  = self._run_aco(seed)
+
+            if self.optimo:
+                print(f"GA={len_ga:.0f}({_gap(len_ga, self.optimo):.2f}%)  "
+                      f"CBGA={len_cbga:.0f}({_gap(len_cbga, self.optimo):.2f}%)  "
+                      f"ACO={len_aco:.0f}({_gap(len_aco, self.optimo):.2f}%)")
+            else:
+                print(f"GA={len_ga:.0f}  CBGA={len_cbga:.0f}  ACO={len_aco:.0f}")
+
+            self._registrar("GA",   len_ga,   t_ga,   hist_ga)
+            self._registrar("CBGA", len_cbga, t_cbga, hist_cbga)
+            self._registrar("ACO",  len_aco,  t_aco,  hist_aco)
+
+    # ── CSV ───────────────────────────────────────────────────────────────
+
+    def save_csv(self, csv_path: str) -> None:
+        campos = ["instancia", "algoritmo", "seed", "longitud", "tiempo_s", "gap_pct", "historial"]
+        with open(csv_path, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=campos)
+            writer.writeheader()
+            writer.writerows(self.registros)
+        print(f"\n  CSV guardado → {csv_path}")
+
+    # ── Resumen en consola ────────────────────────────────────────────────
+
+    def print_resumen(self) -> None:
+        n_seeds = len(self.seeds)
+        print(f"\n{'='*62}")
+        print(f"RESUMEN — {self.nombre}  ({n_seeds} seeds × {self.args.time_limit}s)")
+        print(f"{'='*62}")
+        header = f"{'Algoritmo':<8} {'Mejor':>8} {'Peor':>8} {'Media':>10} {'Std':>8}"
+        if self.optimo:
+            header += f" {'GAP_best%':>10} {'GAP_med%':>10}"
+        header += f" {'T.med(s)':>10}"
+        print(header)
+        print("-" * 62)
+        for algo in ["GA", "CBGA", "ACO"]:
+            s = _stats(self.resultados[algo]["lengths"])
+            t = _stats(self.resultados[algo]["times"])
+            row = f"{algo:<8} {s['best']:>8.1f} {s['worst']:>8.1f} {s['mean']:>10.1f} {s['std']:>8.1f}"
+            if self.optimo:
+                row += f" {_gap(s['best'], self.optimo):>10.2f} {_gap(s['mean'], self.optimo):>10.2f}"
+            row += f" {t['mean']:>10.2f}"
+            print(row)
+        print(f"{'='*62}\n")
 
 
 def main():
@@ -91,10 +187,10 @@ def main():
     ap.add_argument("--no-elitist", action="store_true")
     args = ap.parse_args()
 
-    nombre = os.path.basename(args.instance)
-    seeds  = list(range(args.seed_start, args.seed_start + args.seeds))
-    optimo = OPTIMOS.get(nombre)
-    t_est  = args.seeds * 3 * args.time_limit
+    nombre  = os.path.basename(args.instance)
+    seeds   = list(range(args.seed_start, args.seed_start + args.seeds))
+    optimo  = OPTIMOS.get(nombre)
+    t_est   = args.seeds * 3 * args.time_limit
 
     print(f"\n{'='*62}")
     print(f"Instancia  : {nombre}")
@@ -107,80 +203,17 @@ def main():
     cities = read_tsp(args.instance)
     dist   = make_dist_matrix(cities)
 
-    registros  = []
-    historiales = {a: [] for a in ["GA", "CBGA", "ACO"]}
-    resultados  = {a: {"lengths": [], "times": []} for a in ["GA", "CBGA", "ACO"]}
+    runner = ExperimentRunner(args=args, cities=cities, dist=dist, nombre=nombre, seeds=seeds)
+    runner.run()
 
-    for i, seed in enumerate(seeds, 1):
-        print(f"  Seed {seed:3d} ({i:2d}/{args.seeds})", end="  ")
-
-        len_ga,   t_ga,   hist_ga   = run_ga(cities, seed, args)
-        len_cbga, t_cbga, hist_cbga = run_cbga(cities, seed, args)
-        len_aco,  t_aco,  hist_aco  = run_aco(cities, dist, seed, args)
-
-        # GAP%
-        if optimo:
-            g_ga   = f"{gap(len_ga,   optimo):.2f}%"
-            g_cbga = f"{gap(len_cbga, optimo):.2f}%"
-            g_aco  = f"{gap(len_aco,  optimo):.2f}%"
-            print(f"GA={len_ga:.0f}({g_ga})  CBGA={len_cbga:.0f}({g_cbga})  ACO={len_aco:.0f}({g_aco})")
-        else:
-            print(f"GA={len_ga:.0f}  CBGA={len_cbga:.0f}  ACO={len_aco:.0f}")
-
-        for algo, length, t, hist in [
-            ("GA",   len_ga,   t_ga,   hist_ga),
-            ("CBGA", len_cbga, t_cbga, hist_cbga),
-            ("ACO",  len_aco,  t_aco,  hist_aco),
-        ]:
-            resultados[algo]["lengths"].append(length)
-            resultados[algo]["times"].append(t)
-            historiales[algo].append(hist)
-            registros.append({
-                "instancia":  nombre,
-                "algoritmo":  algo,
-                "seed":       seed,
-                "longitud":   round(length, 2),
-                "tiempo_s":   round(t, 4),
-                "gap_pct":    round(gap(length, optimo), 4) if optimo else "",
-                "historial":  json.dumps(hist),   # guardado como JSON en el CSV
-            })
-
-    # ── CSV ───────────────────────────────────────────────────────────────
     csv_path = args.output
     if csv_path is None:
         base = os.path.splitext(nombre)[0]
         os.makedirs("resultados", exist_ok=True)
         csv_path = os.path.join("resultados", f"resultados_{base}.csv")
 
-    campos = ["instancia", "algoritmo", "seed", "longitud", "tiempo_s", "gap_pct", "historial"]
-    with open(csv_path, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=campos)
-        writer.writeheader()
-        writer.writerows(registros)
-
-    print(f"\n  CSV guardado → {csv_path}")
-
-    # ── Resumen ───────────────────────────────────────────────────────────
-    print(f"\n{'='*62}")
-    print(f"RESUMEN — {nombre}  ({args.seeds} seeds × {args.time_limit}s)")
-    print(f"{'='*62}")
-    header = f"{'Algoritmo':<8} {'Mejor':>8} {'Peor':>8} {'Media':>10} {'Std':>8}"
-    if optimo:
-        header += f" {'GAP_best%':>10} {'GAP_med%':>10}"
-    header += f" {'T.med(s)':>10}"
-    print(header)
-    print(f"{'-'*62}")
-
-    for algo in ["GA", "CBGA", "ACO"]:
-        s = stats(resultados[algo]["lengths"])
-        t = stats(resultados[algo]["times"])
-        row = f"{algo:<8} {s['best']:>8.1f} {s['worst']:>8.1f} {s['mean']:>10.1f} {s['std']:>8.1f}"
-        if optimo:
-            row += f" {gap(s['best'], optimo):>10.2f} {gap(s['mean'], optimo):>10.2f}"
-        row += f" {t['mean']:>10.2f}"
-        print(row)
-
-    print(f"{'='*62}\n")
+    runner.save_csv(csv_path)
+    runner.print_resumen()
 
 
 if __name__ == "__main__":
