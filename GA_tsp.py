@@ -1,6 +1,5 @@
 """
 GA_tsp.py — Algoritmo Genético (GA) para TSP.
-Implementación orientada a objetos (OOP).
 Presupuesto: tiempo fijo (Opción A).
 """
 
@@ -148,25 +147,3 @@ class GeneticAlgorithm:
             self.history.append((round(t_elapsed, 4), self.best_len))
 
         return self.best_tour, self.history
-
-
-# ── Función wrapper — mantiene compatibilidad con main.py y Runner.py ─────────
-
-def genetic_tsp(
-    cities: List[City],
-    pop_size: int,
-    time_limit: float,
-    pc: float,
-    pm: float,
-    elitism_k: int,
-    tournament_k: int,
-    local_2opt: bool = True,
-    seed: Optional[int] = None,
-) -> Tuple[Tour, List[Tuple[float, float]]]:
-    """Wrapper funcional sobre GeneticAlgorithm para compatibilidad."""
-    algo = GeneticAlgorithm(
-        cities=cities, pop_size=pop_size, time_limit=time_limit,
-        pc=pc, pm=pm, elitism_k=elitism_k, tournament_k=tournament_k,
-        local_2opt=local_2opt, seed=seed,
-    )
-    return algo.run()

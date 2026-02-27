@@ -1,7 +1,6 @@
 """
 Runner.py — Experimento de 30 seeds. Opción A (tiempo fijo).
 Guarda resultados + historial de convergencia + GAP%.
-Implementación orientada a objetos (OOP).
 """
 
 import time
@@ -23,13 +22,11 @@ OPTIMOS = {
     "st70.tsp":     675,
 }
 
-
 def _stats(values: List[float]) -> Dict:
     n    = len(values)
     mean = sum(values) / n
     std  = (sum((x - mean) ** 2 for x in values) / n) ** 0.5
     return {"best": min(values), "worst": max(values), "mean": mean, "std": std}
-
 
 def _gap(length: float, optimo: float) -> float:
     return (length - optimo) / optimo * 100

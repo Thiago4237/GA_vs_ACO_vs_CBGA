@@ -1,6 +1,5 @@
 """
 CBGA_tsp.py — Algoritmo Genético de Chu-Beasley (CBGA) para TSP.
-Implementación orientada a objetos (OOP).
 Presupuesto: tiempo fijo (Opción A).
 """
 
@@ -13,7 +12,7 @@ from utils import City, Tour, tour_length
 
 class ChuBeasleyGA:
     """
-    Algoritmo Genético de Chu-Beasley para TSP.
+    CBGA para TSP.
 
     Diferencias clave frente al GA clásico:
       1. Sin duplicados en la población (hash por aristas)
@@ -29,7 +28,7 @@ class ChuBeasleyGA:
     pc               : probabilidad de cruce
     pm               : probabilidad de mutación
     tournament_k     : tamaño del torneo de selección
-    min_diversity    : fracción mínima de aristas distintas (0.0–1.0)
+    min_diversity    : fracción mínima de aristas distintas (0.0 - 1.0)
     attempts_per_gen : intentos de reproducción por ciclo
     local_2opt       : aplica 2-opt al mejor individuo por ciclo
     seed             : semilla para reproducibilidad
@@ -211,27 +210,3 @@ class ChuBeasleyGA:
             self.history.append((round(t_elapsed, 4), self.best_len))
 
         return self.best_tour, self.history
-
-
-# ── Función wrapper — mantiene compatibilidad con main.py y Runner.py ─────────
-
-def cbga_tsp(
-    cities: List[City],
-    pop_size: int,
-    time_limit: float,
-    pc: float,
-    pm: float,
-    tournament_k: int,
-    min_diversity: float  = 0.15,
-    attempts_per_gen: int = 5,
-    local_2opt: bool      = True,
-    seed: Optional[int]   = None,
-) -> Tuple[Tour, List[Tuple[float, float]]]:
-    """Wrapper funcional sobre ChuBeasleyGA para compatibilidad."""
-    algo = ChuBeasleyGA(
-        cities=cities, pop_size=pop_size, time_limit=time_limit,
-        pc=pc, pm=pm, tournament_k=tournament_k,
-        min_diversity=min_diversity, attempts_per_gen=attempts_per_gen,
-        local_2opt=local_2opt, seed=seed,
-    )
-    return algo.run()

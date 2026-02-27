@@ -1,6 +1,5 @@
 """
 visualizaciones.py — Gráficas del taller GA vs CBGA vs ACO.
-Implementación orientada a objetos (OOP).
 
 Lee el CSV generado por Runner.py y produce:
     1. Boxplot de longitudes

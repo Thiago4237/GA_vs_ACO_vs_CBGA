@@ -1,6 +1,5 @@
 """
 ACO_tsp.py — Ant Colony Optimization (ACO) para TSP.
-Implementación orientada a objetos (OOP).
 Presupuesto: tiempo fijo (Opción A).
 """
 
@@ -15,11 +14,11 @@ from utils import tour_length_idx
 
 class AntColony:
     """
-    Ant Colony Optimization para TSP.
+    ACO para TSP.
 
     Parámetros
     ----------
-    dist       : matriz de distancias n×n
+    dist       : matriz de distancias
     num_ants   : número de hormigas por iteración
     time_limit : segundos máximos de ejecución
     alpha      : peso de la feromona (τ)
@@ -197,27 +196,3 @@ class AntColony:
             self.history.append((round(t_elapsed, 4), self.best_len))
 
         return self.best_trail, self.history
-
-
-# ── Función wrapper — mantiene compatibilidad con main.py y Runner.py ─────────
-
-def ant_colony_tsp(
-    dist: List[List[float]],
-    num_ants: int,
-    time_limit: float,
-    alpha: float,
-    beta: float,
-    rho: float,
-    Q: float,
-    tau0: float,
-    elitist: bool,
-    local_2opt: bool    = True,
-    seed: Optional[int] = None,
-) -> Tuple[List[int], List[Tuple[float, float]]]:
-    """Wrapper funcional sobre AntColony para compatibilidad."""
-    algo = AntColony(
-        dist=dist, num_ants=num_ants, time_limit=time_limit,
-        alpha=alpha, beta=beta, rho=rho, Q=Q, tau0=tau0,
-        elitist=elitist, local_2opt=local_2opt, seed=seed,
-    )
-    return algo.run()

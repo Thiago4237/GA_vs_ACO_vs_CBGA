@@ -23,7 +23,6 @@ OPTIMOS = {
     "st70.tsp":     675,
 }
 
-
 class Comparador:
     """
     Ejecuta y compara GA, CBGA y ACO sobre una instancia TSP.
@@ -131,7 +130,6 @@ class Comparador:
         self.run_cbga()
         self.run_aco()
         self.print_resumen()
-
 
 def main():
     ap = argparse.ArgumentParser(description="Comparativa GA vs ACO vs CBGA — Opción A")
